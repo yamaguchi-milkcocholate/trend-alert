@@ -103,10 +103,10 @@ def main():
     )
     args = parser.parse_args()
 
-    token = os.getenv("GITHUB_TOKEN")
+    token = os.getenv("TREND_READ_GITHUB_TOKEN")
     if not token:
         print(
-            "ERROR: GITHUB_TOKEN が未設定です。 .env に設定してください。",
+            "ERROR: TREND_READ_GITHUB_TOKEN が未設定です。 .env に設定してください。",
             file=sys.stderr,
         )
         sys.exit(1)
