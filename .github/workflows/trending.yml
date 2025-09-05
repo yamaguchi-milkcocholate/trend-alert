@@ -32,7 +32,7 @@ jobs:
 
       - name: Run
         run: |
-          uv run python trending.py \
+          uv run python main.py \
             --language Python \
             --days 3 \
             --top 5 \
