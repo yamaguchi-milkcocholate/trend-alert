@@ -34,7 +34,7 @@ jobs:
         run: |
           uv run python main.py \
             --language Python \
-            --days 3 \
+            --days 7 \
             --top 5 \
             --per-page 30 \
             --markdown-out out.md \
