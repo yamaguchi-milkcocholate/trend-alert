@@ -38,7 +38,8 @@ jobs:
             --top 5 \
             --per-page 30 \
             --markdown-out out.md \
-            --title "今日の“擬似”GitHubトレンド (Python)" \
+            --use-created \
+            --title "今日のGitHubトレンド (Python)" \
             --slack
 
       - name: Upload artifacts
