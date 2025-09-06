@@ -19,6 +19,8 @@ jobs:
     env:
       TREND_READ_GITHUB_TOKEN: ${{ secrets.TREND_READ_GITHUB_TOKEN }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
 
     steps:
       - uses: actions/checkout@v4
