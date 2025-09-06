@@ -7,9 +7,80 @@ from typing import Any, Dict, List
 
 import requests
 from dotenv import load_dotenv
+from langchain.output_parsers import PydanticOutputParser
+from langchain.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, Field
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 GITHUB_API = "https://api.github.com/search/repositories"
+
+
+class RepoDigest(BaseModel):
+    summary: str = Field(description="技術の要点を2-3文で")
+    why_care: str = Field(description="今使う価値を一言で")
+    use_cases: list[str] = Field(default_factory=list, description="具体用途 最大3")
+    setup: list[str] = Field(default_factory=list, description="最短手順 2-4行")
+    difficulty: int = Field(ge=1, le=5, description="1=易 5=重")
+
+
+def build_chain():
+    parser = PydanticOutputParser(pydantic_object=RepoDigest)
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", "あなたは優秀なMLエンジニアの編集者。出力は必ずJSONのみ。"),
+            (
+                "user",
+                """次のGitHubリポを、実務エンジニアが“今日触るか決める”ための最小情報に要約。
+入力:
+- name: {name}
+- url: {url}
+- description: {desc}
+- meta:
+  Language: {lang}
+  Stars: {stars}
+
+要件:
+- summary: 2-3文
+- why_care: 一言
+- use_cases: 最大3（名詞句）
+- setup: 2-4行（箇条書き/最短手順）
+- difficulty: 1-5（1=超簡単）
+
+{format_instructions}""",
+            ),
+        ]
+    ).partial(format_instructions=parser.get_format_instructions())
+
+    llm = ChatOpenAI(
+        model=os.getenv("OPENAI_MODEL"), openai_api_key=os.getenv("OPENAI_API_KEY")
+    )
+    return prompt | llm | parser
+
+
+def summarize_with_langchain(repo: Dict[str, Any], chain) -> RepoDigest:
+    return chain.invoke(
+        {
+            "name": repo["full_name"],
+            "url": repo["html_url"],
+            "desc": (repo.get("description") or "").strip(),
+            "lang": repo.get("language") or "-",
+            "stars": repo.get("stargazers_count", 0),
+        }
+    )
+
+
+def slack_block_with_digest(i: int, it: Dict[str, Any], d: RepoDigest) -> str:
+    uc = " ・".join(d.use_cases[:3]) if d.use_cases else "—"
+    setup = "\n".join([f"   - {s}" for s in d.setup[:4]]) if d.setup else ""
+    return (
+        f"{i}. {it['full_name']} ★{it['stargazers_count']}\n"
+        f"   {it['html_url']}\n"
+        f"   {d.summary}\n"
+        f"   🧠 {d.why_care} / 難易度★{d.difficulty}\n"
+        f"   使いどころ: {uc}\n"
+        f"{setup}\n"
+    )
 
 
 def build_query(language: str, days: int, use_created: bool) -> str:
@@ -135,12 +206,15 @@ def main():
                 file=sys.stderr,
             )
         else:
+            chain = build_chain()
             text_lines = [args.title, ""]
+
             for i, it in enumerate(items[: args.top], 1):
-                line = f"""{i}. {it["full_name"]} ★{it["stargazers_count"]}
-    {it.get("description") or ""}
-    {it["html_url"]}"""
-                text_lines.append(line)
+                d = summarize_with_langchain(it, chain)
+                text_lines.append(slack_block_with_digest(i, it, d))
+
+                text_lines.append(f"   {(it.get('description') or '').strip()}")
+
             post_slack(webhook, "\n".join(text_lines))
             print("[INFO] Slack に投稿しました。")
 
